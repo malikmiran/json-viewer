@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
     <title>Chat Viewer</title>
-    <!-- Add html2pdf library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        /* Previous styles remain the same */
+        /* Base styles */
         .export-buttons {
             display: none;
             text-align: center;
@@ -31,103 +31,172 @@
             background: #45a049;
         }
 
+        .export-button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            margin: 10px 0;
+        }
+
+        /* Print-specific styles */
         @media print {
             .upload-container, .export-buttons {
                 display: none !important;
+            }
+            
+            /* Add any other print-specific styles here */
+            body {
+                margin: 0;
+                padding: 20px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Previous upload container remains the same -->
-
-    <div class="export-buttons" id="exportButtons">
-        <button class="export-button" onclick="exportAsPDF()">Save as PDF</button>
-        <button class="export-button" onclick="exportAsHTML()">Save as HTML</button>
+    <div class="upload-container">
+        <input type="file" id="fileInput" accept=".json">
     </div>
 
-    <!-- Previous chat container remains the same -->
+    <div class="export-buttons" id="exportButtons">
+        <button class="export-button" id="pdfButton" onclick="exportAsPDF()">Save as PDF</button>
+        <button class="export-button" id="htmlButton" onclick="exportAsHTML()">Save as HTML</button>
+        <div class="loading" id="loadingIndicator">Processing...</div>
+    </div>
+
+    <div id="chatContainer" style="display: none;"></div>
 
     <script>
-        // Previous functions remain the same
+        async function exportAsPDF() {
+            const pdfButton = document.getElementById('pdfButton');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            
+            try {
+                pdfButton.disabled = true;
+                loadingIndicator.style.display = 'block';
+                
+                const element = document.getElementById('chatContainer');
+                const opt = {
+                    margin: 1,
+                    filename: 'chat-export.pdf',
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2 },
+                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+                };
 
-        // Add new export functions
-        function exportAsPDF() {
-            const element = document.getElementById('chatContainer');
-            const opt = {
-                margin: 1,
-                filename: 'chat-export.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2 },
-                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-            };
-
-            html2pdf().set(opt).from(element).save();
+                await html2pdf().set(opt).from(element).save();
+            } catch (error) {
+                alert(`Error generating PDF: ${error.message}`);
+            } finally {
+                pdfButton.disabled = false;
+                loadingIndicator.style.display = 'none';
+            }
         }
 
         function exportAsHTML() {
-            const element = document.getElementById('chatContainer');
-            const htmlContent = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Chat Export</title>
-                    <style>
-                        ${document.querySelector('style').innerHTML}
-                    </style>
-                </head>
-                <body>
-                    ${element.outerHTML}
-                </body>
-                </html>
-            `;
+            const htmlButton = document.getElementById('htmlButton');
+            
+            try {
+                htmlButton.disabled = true;
+                const element = document.getElementById('chatContainer');
+                
+                // Create a clean version of styles for export
+                const exportStyles = `
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    .message { margin: 10px 0; padding: 10px; border-radius: 5px; }
+                    .user { background: #e3f2fd; }
+                    .assistant { background: #f5f5f5; }
+                `;
 
-            const blob = new Blob([htmlContent], { type: 'text/html' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'chat-export.html';
-            a.click();
-            window.URL.revokeObjectURL(url);
+                const htmlContent = `
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>Chat Export</title>
+                        <style>${exportStyles}</style>
+                    </head>
+                    <body>
+                        ${element.outerHTML}
+                    </body>
+                    </html>
+                `;
+
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'chat-export.html';
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                alert(`Error exporting HTML: ${error.message}`);
+            } finally {
+                htmlButton.disabled = false;
+            }
         }
 
-        // Modify the file input handler to show export buttons
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-            clearError();
+        function validateChatData(data) {
+            if (!Array.isArray(data)) {
+                throw new Error('Invalid chat data format');
+            }
+            
+            if (data.length === 0) {
+                throw new Error('Chat data is empty');
+            }
+
+            data.forEach((message, index) => {
+                if (!message.role || !message.content) {
+                    throw new Error(`Invalid message format at index ${index}`);
+                }
+            });
+        }
+
+        function createMessageElement(message) {
+            const div = document.createElement('div');
+            div.className = `message ${message.role}`;
+            div.textContent = message.content;
+            return div;
+        }
+
+        // File input handler with chunked processing
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const chatData = JSON.parse(e.target.result);
-                    validateChatData(chatData);
-                    
-                    const container = document.getElementById('chatContainer');
-                    container.innerHTML = '';
-                    container.style.display = 'block';
-                    
-                    chatData.forEach(message => {
-                        container.appendChild(createMessageElement(message));
-                    });
+            const container = document.getElementById('chatContainer');
+            const exportButtons = document.getElementById('exportButtons');
+            container.style.display = 'none';
+            exportButtons.style.display = 'none';
 
-                    // Show export buttons after successful load
-                    document.getElementById('exportButtons').style.display = 'block';
-                } catch (error) {
-                    displayError(`Error: ${error.message}`);
-                    document.getElementById('chatContainer').style.display = 'none';
-                    document.getElementById('exportButtons').style.display = 'none';
+            try {
+                const text = await file.text();
+                const chatData = JSON.parse(text);
+                validateChatData(chatData);
+                
+                container.innerHTML = '';
+                
+                // Process messages in chunks to avoid blocking the UI
+                const chunkSize = 100;
+                for (let i = 0; i < chatData.length; i += chunkSize) {
+                    const chunk = chatData.slice(i, i + chunkSize);
+                    await new Promise(resolve => {
+                        setTimeout(() => {
+                            chunk.forEach(message => {
+                                container.appendChild(createMessageElement(message));
+                            });
+                            resolve();
+                        }, 0);
+                    });
                 }
-            };
-            
-            reader.onerror = function() {
-                displayError('Error reading file');
-                document.getElementById('chatContainer').style.display = 'none';
-                document.getElementById('exportButtons').style.display = 'none';
-            };
-            
-            reader.readAsText(file);
+                
+                container.style.display = 'block';
+                exportButtons.style.display = 'block';
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
         });
     </script>
 </body>
