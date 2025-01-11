@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Viewer</title>
+    <!-- Add html2pdf library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        /* Previous styles remain the same */
+        .export-buttons {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+            max-width: 800px;
+            margin: 20px auto;
+        }
+
+        .export-button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: inline-block;
+            margin: 10px;
+            border: none;
+        }
+
+        .export-button:hover {
+            background: #45a049;
+        }
+
+        @media print {
+            .upload-container, .export-buttons {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Previous upload container remains the same -->
+
+    <div class="export-buttons" id="exportButtons">
+        <button class="export-button" onclick="exportAsPDF()">Save as PDF</button>
+        <button class="export-button" onclick="exportAsHTML()">Save as HTML</button>
+    </div>
+
+    <!-- Previous chat container remains the same -->
+
+    <script>
+        // Previous functions remain the same
+
+        // Add new export functions
+        function exportAsPDF() {
+            const element = document.getElementById('chatContainer');
+            const opt = {
+                margin: 1,
+                filename: 'chat-export.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save();
+        }
+
+        function exportAsHTML() {
+            const element = document.getElementById('chatContainer');
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Chat Export</title>
+                    <style>
+                        ${document.querySelector('style').innerHTML}
+                    </style>
+                </head>
+                <body>
+                    ${element.outerHTML}
+                </body>
+                </html>
+            `;
+
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'chat-export.html';
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Modify the file input handler to show export buttons
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            clearError();
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const chatData = JSON.parse(e.target.result);
+                    validateChatData(chatData);
+                    
+                    const container = document.getElementById('chatContainer');
+                    container.innerHTML = '';
+                    container.style.display = 'block';
+                    
+                    chatData.forEach(message => {
+                        container.appendChild(createMessageElement(message));
+                    });
+
+                    // Show export buttons after successful load
+                    document.getElementById('exportButtons').style.display = 'block';
+                } catch (error) {
+                    displayError(`Error: ${error.message}`);
+                    document.getElementById('chatContainer').style.display = 'none';
+                    document.getElementById('exportButtons').style.display = 'none';
+                }
+            };
+            
+            reader.onerror = function() {
+                displayError('Error reading file');
+                document.getElementById('chatContainer').style.display = 'none';
+                document.getElementById('exportButtons').style.display = 'none';
+            };
+            
+            reader.readAsText(file);
+        });
+    </script>
+</body>
+</html>
