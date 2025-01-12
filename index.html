@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
     <title>IMO Chat Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
@@ -50,15 +50,19 @@
             word-wrap: break-word;
         }
 
+        .message-content a {
+            color: #2196F3;
+            text-decoration: none;
+        }
+
+        .message-content a:hover {
+            text-decoration: underline;
+        }
+
         .message-time {
             font-size: 0.7em;
             color: #999;
             margin-top: 5px;
-        }
-
-        .message img {
-            max-width: 200px;
-            border-radius: 5px;
         }
 
         .export-buttons {
@@ -157,10 +161,12 @@
             
             // Handle different types of content
             if (content.startsWith('uploaded photo:')) {
-                const img = document.createElement('img');
-                img.src = content.replace('uploaded photo: ', '');
-                img.alt = 'Shared image';
-                contentDiv.appendChild(img);
+                const url = content.replace('uploaded photo: ', '').trim();
+                const link = document.createElement('a');
+                link.href = url;
+                link.target = '_blank';
+                link.textContent = '📷 Photo';
+                contentDiv.appendChild(link);
             } else {
                 contentDiv.textContent = content;
             }
