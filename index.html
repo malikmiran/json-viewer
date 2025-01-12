@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline';">
     <title>IMO Chat Viewer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -53,6 +52,8 @@
         .message-content a {
             color: #2196F3;
             text-decoration: none;
+            display: inline-block;
+            margin: 5px 0;
         }
 
         .message-content a:hover {
@@ -85,27 +86,19 @@
             background: #45a049;
         }
 
-        .export-button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-
-        .loading {
-            display: none;
-            margin: 10px 0;
-            text-align: center;
-            color: #666;
-        }
-
         @media print {
             .upload-container, .export-buttons {
                 display: none !important;
             }
             body {
                 background: white;
+                padding: 0;
+                margin: 0;
             }
             .chat-container {
                 box-shadow: none;
+                max-width: none;
+                padding: 10px;
             }
         }
     </style>
@@ -116,9 +109,8 @@
     </div>
 
     <div class="export-buttons" id="exportButtons">
-        <button class="export-button" id="pdfButton" onclick="exportAsPDF()">Save as PDF</button>
-        <button class="export-button" id="htmlButton" onclick="exportAsHTML()">Save as HTML</button>
-        <div class="loading" id="loadingIndicator">Processing...</div>
+        <button class="export-button" onclick="printChat()">Save as PDF</button>
+        <button class="export-button" onclick="exportAsHTML()">Save as HTML</button>
     </div>
 
     <div id="chatContainer" class="chat-container" style="display: none;"></div>
@@ -135,7 +127,7 @@
 
             data.forEach((message, index) => {
                 if (!Array.isArray(message) || message.length < 4) {
-                    throw new Error(`Invalid message format at index ${index}. Expected [sender, timestamp, role, content]`);
+                    throw new Error(`Invalid message format at index ${index}`);
                 }
             });
         }
@@ -144,39 +136,47 @@
             return new Date(timestamp).toLocaleString();
         }
 
+        function createMediaLink(type, url) {
+            const icons = {
+                photo: '📷 Photo',
+                video: '🎥 Video',
+                audio: '🎵 Audio'
+            };
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.textContent = icons[type];
+            return link;
+        }
+
         function createMessageElement(message) {
             const [sender, timestamp, role, content] = message;
             
             const div = document.createElement('div');
             div.className = `message ${role === 'me' ? 'me' : 'other'}`;
             
-            // Create message header with sender name
             const header = document.createElement('div');
             header.className = 'message-header';
             header.textContent = sender || (role === 'me' ? 'Me' : 'Unknown');
             
-            // Create message content
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
             
             // Handle different types of content
             if (content.startsWith('uploaded photo:')) {
-                const url = content.replace('uploaded photo: ', '').trim();
-                const link = document.createElement('a');
-                link.href = url;
-                link.target = '_blank';
-                link.textContent = '📷 Photo';
-                contentDiv.appendChild(link);
+                contentDiv.appendChild(createMediaLink('photo', content.replace('uploaded photo: ', '').trim()));
+            } else if (content.startsWith('uploaded video:')) {
+                contentDiv.appendChild(createMediaLink('video', content.replace('uploaded video: ', '').trim()));
+            } else if (content.startsWith('uploaded audio:')) {
+                contentDiv.appendChild(createMediaLink('audio', content.replace('uploaded audio: ', '').trim()));
             } else {
                 contentDiv.textContent = content;
             }
             
-            // Create timestamp
             const time = document.createElement('div');
             time.className = 'message-time';
             time.textContent = formatTimestamp(timestamp);
             
-            // Assemble message
             div.appendChild(header);
             div.appendChild(contentDiv);
             div.appendChild(time);
@@ -184,65 +184,33 @@
             return div;
         }
 
-        async function exportAsPDF() {
-            const pdfButton = document.getElementById('pdfButton');
-            const loadingIndicator = document.getElementById('loadingIndicator');
-            
-            try {
-                pdfButton.disabled = true;
-                loadingIndicator.style.display = 'block';
-                
-                const element = document.getElementById('chatContainer');
-                const opt = {
-                    margin: 1,
-                    filename: 'chat-export.pdf',
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2 },
-                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-                };
-
-                await html2pdf().set(opt).from(element).save();
-            } catch (error) {
-                alert(`Error generating PDF: ${error.message}`);
-            } finally {
-                pdfButton.disabled = false;
-                loadingIndicator.style.display = 'none';
-            }
+        function printChat() {
+            window.print();
         }
 
         function exportAsHTML() {
-            const htmlButton = document.getElementById('htmlButton');
-            
-            try {
-                htmlButton.disabled = true;
-                const element = document.getElementById('chatContainer');
-                
-                const htmlContent = `
-                    <!DOCTYPE html>
-                    <html lang="en">
-                    <head>
-                        <meta charset="UTF-8">
-                        <title>Chat Export</title>
-                        <style>${document.querySelector('style').innerHTML}</style>
-                    </head>
-                    <body>
-                        ${element.outerHTML}
-                    </body>
-                    </html>
-                `;
+            const element = document.getElementById('chatContainer');
+            const htmlContent = `
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Chat Export</title>
+                    <style>${document.querySelector('style').innerHTML}</style>
+                </head>
+                <body>
+                    ${element.outerHTML}
+                </body>
+                </html>
+            `;
 
-                const blob = new Blob([htmlContent], { type: 'text/html' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'chat-export.html';
-                a.click();
-                window.URL.revokeObjectURL(url);
-            } catch (error) {
-                alert(`Error exporting HTML: ${error.message}`);
-            } finally {
-                htmlButton.disabled = false;
-            }
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'chat-export.html';
+            a.click();
+            window.URL.revokeObjectURL(url);
         }
 
         document.getElementById('fileInput').addEventListener('change', async function(e) {
