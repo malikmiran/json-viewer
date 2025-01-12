@@ -3,17 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
-    <title>Chat Viewer</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data:;">
+    <title>IMO Chat Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        /* Base styles */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 10px;
+            position: relative;
+        }
+
+        .message.me {
+            background: #e3f2fd;
+            margin-left: 20%;
+        }
+
+        .message.other {
+            background: #f5f5f5;
+            margin-right: 20%;
+        }
+
+        .message-header {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .message-content {
+            word-wrap: break-word;
+        }
+
+        .message-time {
+            font-size: 0.7em;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .message img {
+            max-width: 200px;
+            border-radius: 5px;
+        }
+
         .export-buttons {
             display: none;
             text-align: center;
             margin: 20px 0;
-            max-width: 800px;
-            margin: 20px auto;
         }
 
         .export-button {
@@ -22,9 +73,8 @@
             padding: 10px 20px;
             border-radius: 5px;
             cursor: pointer;
-            display: inline-block;
-            margin: 10px;
             border: none;
+            margin: 0 10px;
         }
 
         .export-button:hover {
@@ -39,18 +89,19 @@
         .loading {
             display: none;
             margin: 10px 0;
+            text-align: center;
+            color: #666;
         }
 
-        /* Print-specific styles */
         @media print {
             .upload-container, .export-buttons {
                 display: none !important;
             }
-            
-            /* Add any other print-specific styles here */
             body {
-                margin: 0;
-                padding: 20px;
+                background: white;
+            }
+            .chat-container {
+                box-shadow: none;
             }
         }
     </style>
@@ -66,9 +117,67 @@
         <div class="loading" id="loadingIndicator">Processing...</div>
     </div>
 
-    <div id="chatContainer" style="display: none;"></div>
+    <div id="chatContainer" class="chat-container" style="display: none;"></div>
 
     <script>
+        function validateChatData(data) {
+            if (!Array.isArray(data)) {
+                throw new Error('Invalid chat data format');
+            }
+            
+            if (data.length === 0) {
+                throw new Error('Chat data is empty');
+            }
+
+            data.forEach((message, index) => {
+                if (!Array.isArray(message) || message.length < 4) {
+                    throw new Error(`Invalid message format at index ${index}. Expected [sender, timestamp, role, content]`);
+                }
+            });
+        }
+
+        function formatTimestamp(timestamp) {
+            return new Date(timestamp).toLocaleString();
+        }
+
+        function createMessageElement(message) {
+            const [sender, timestamp, role, content] = message;
+            
+            const div = document.createElement('div');
+            div.className = `message ${role === 'me' ? 'me' : 'other'}`;
+            
+            // Create message header with sender name
+            const header = document.createElement('div');
+            header.className = 'message-header';
+            header.textContent = sender || (role === 'me' ? 'Me' : 'Unknown');
+            
+            // Create message content
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // Handle different types of content
+            if (content.startsWith('uploaded photo:')) {
+                const img = document.createElement('img');
+                img.src = content.replace('uploaded photo: ', '');
+                img.alt = 'Shared image';
+                contentDiv.appendChild(img);
+            } else {
+                contentDiv.textContent = content;
+            }
+            
+            // Create timestamp
+            const time = document.createElement('div');
+            time.className = 'message-time';
+            time.textContent = formatTimestamp(timestamp);
+            
+            // Assemble message
+            div.appendChild(header);
+            div.appendChild(contentDiv);
+            div.appendChild(time);
+            
+            return div;
+        }
+
         async function exportAsPDF() {
             const pdfButton = document.getElementById('pdfButton');
             const loadingIndicator = document.getElementById('loadingIndicator');
@@ -102,21 +211,13 @@
                 htmlButton.disabled = true;
                 const element = document.getElementById('chatContainer');
                 
-                // Create a clean version of styles for export
-                const exportStyles = `
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    .message { margin: 10px 0; padding: 10px; border-radius: 5px; }
-                    .user { background: #e3f2fd; }
-                    .assistant { background: #f5f5f5; }
-                `;
-
                 const htmlContent = `
                     <!DOCTYPE html>
                     <html lang="en">
                     <head>
                         <meta charset="UTF-8">
                         <title>Chat Export</title>
-                        <style>${exportStyles}</style>
+                        <style>${document.querySelector('style').innerHTML}</style>
                     </head>
                     <body>
                         ${element.outerHTML}
@@ -138,30 +239,6 @@
             }
         }
 
-        function validateChatData(data) {
-            if (!Array.isArray(data)) {
-                throw new Error('Invalid chat data format');
-            }
-            
-            if (data.length === 0) {
-                throw new Error('Chat data is empty');
-            }
-
-            data.forEach((message, index) => {
-                if (!message.role || !message.content) {
-                    throw new Error(`Invalid message format at index ${index}`);
-                }
-            });
-        }
-
-        function createMessageElement(message) {
-            const div = document.createElement('div');
-            div.className = `message ${message.role}`;
-            div.textContent = message.content;
-            return div;
-        }
-
-        // File input handler with chunked processing
         document.getElementById('fileInput').addEventListener('change', async function(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -178,8 +255,8 @@
                 
                 container.innerHTML = '';
                 
-                // Process messages in chunks to avoid blocking the UI
-                const chunkSize = 100;
+                // Process messages in chunks
+                const chunkSize = 50;
                 for (let i = 0; i < chatData.length; i += chunkSize) {
                     const chunk = chatData.slice(i, i + chunkSize);
                     await new Promise(resolve => {
